@@ -352,7 +352,7 @@ def generate_cold_email_content(lead: Dict, agency_info: Dict, company_descripti
             SENDER CONTEXT:
             - Name: {agency_info.get('sender_name')}
             - Role: {agency_info.get('sender_position')}
-            - Company: {agency_info.get('name')}
+            - Agency Name: {agency_info.get('name')}
             - Services: {', '.join(agency_info.get('services', []))}
             - Calendar Link: {agency_info.get('calendar_link')}
 
@@ -548,7 +548,7 @@ def generate_response_email(lead: Dict[str, Any], conversation_history: str, age
             SENDER CONTEXT:
             - Name: {agency_info.get('sender_name')}
             - Role: {agency_info.get('sender_position')}
-            - Company: {agency_info.get('name')}
+            - Agency Name: {agency_info.get('name')}
             - Services: {', '.join(agency_info.get('services', []))}
             - Calendar Link: {agency_info.get('calendar_link')}
 

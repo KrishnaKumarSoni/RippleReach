@@ -210,26 +210,67 @@ def get_lead_data(start_row: int, end_row: int = 0) -> List[Dict[str, Any]]:
         logging.error(f"Error fetching lead data: {str(e)}")
         raise
 
+def get_agency_worksheet_data() -> Dict[str, str]:
+    """
+    Pulls data from 'Agency Info' worksheet, using first column as keys and second as values.
+    Returns a dictionary of agency information.
+    """
+    try:
+        # Get the Agency Info worksheet
+        scopes = [
+        'https://spreadsheets.google.com/feeds',
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive'
+        ]
+        
+        creds = ServiceAccountCredentials.from_json_keyfile_name(
+            'service_account.json', 
+            scopes
+        )
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(Config.SPREADSHEET_ID)
+        worksheet = sheet.worksheet('Agency Info')
+        
+        # Get all values from first two columns
+        data = worksheet.get_all_values()
+        
+        # Convert to dictionary, skipping empty rows and header
+        agency_info = {}
+        for row in data:
+            if len(row) >= 2 and row[0].strip() and row[1].strip():  # Ensure both key and value exist
+                key = row[0].strip()
+                value = row[1].strip()
+                agency_info[key] = value
+        
+        logging.info(f"Successfully retrieved {len(agency_info)} agency info fields")
+        return agency_info
+        
+    except Exception as e:
+        logging.error(f"Error retrieving agency worksheet data: {str(e)}")
+        return {}
+
 def get_agency_info() -> Dict:
     """Returns agency information using OpenAI to process and structure the data"""
     try:
         # Get raw data from worksheet
-        agency_data = get_worksheet_data('Agency Info')
+        agency_data = get_agency_worksheet_data()
         
         # Format data for OpenAI processing
         data_dump = json.dumps(agency_data, indent=2)
+        # Log the raw data from worksheet
+        logging.info(f"Raw agency data dump: {data_dump}")
         
         processing_prompt = f"""
         Process this agency information dump and create a well-structured agency profile.
         Raw data from worksheet:
         {data_dump}
 
-        Create a complete agency profile JSON with the following structure:
+        Use all this data and then accurately and precisely Create a complete agency profile JSON with the following structure:
         {{
             "name": "Agency name",
             "description": "Comprehensive agency description",
             "website": "Agency website",
-            "calendar_link": "Calendly or meeting link",
+            "calendar_link": "calendar link provided in raw data from worksheet",
             "services": ["List of services"],
             "company_structure": ["Company structure details"],
             "portfolio_projects": [
@@ -244,7 +285,7 @@ def get_agency_info() -> Dict:
             "labs": ["Research/development labs"],
             "pricing_info": "Pricing structure"
         }}
-
+        Ensure you use original data from the raw data from worksheet and not the sample data / descriptions mentioned in the json above.
         Requirements:
         1. Ensure only the fields mentioned above are included
         2. Ensure all fields are properly populated
