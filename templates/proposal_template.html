@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ company_name }} - Project Proposal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="header">
+        <img src="{{ assets.logo }}" alt="Kuberanix" class="logo">
+        <div class="proposal-badge">Project Proposal</div>
+    </div>
+
+    <div class="hero">
+        <h1>{{ project_title }}</h1>
+        <p class="subtitle">Prepared for {{ company_name }}</p>
+        <p class="date">{{ date }}</p>
+    </div>
+
+    <div class="section overview">
+        <h2>Project Overview</h2>
+        <p>{{ project_overview }}</p>
+        {% if assets.overview_image %}
+        <img src="{{ assets.overview_image }}" alt="Project Overview" class="section-image">
+        {% endif %}
+    </div>
+
+    <div class="section solutions">
+        <h2>Our Solution</h2>
+        {% for solution in solutions %}
+        <div class="solution-card">
+            {% if solution.icon %}
+            <img src="{{ solution.icon }}" alt="{{ solution.title }}" class="solution-icon">
+            {% endif %}
+            <h3>{{ solution.title }}</h3>
+            <p>{{ solution.description }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="section timeline">
+        <h2>Project Timeline</h2>
+        <div class="timeline">
+            {% for phase in timeline %}
+            <div class="timeline-item">
+                <div class="timeline-marker"></div>
+                <div>
+                    <h4>{{ phase.title }}</h4>
+                    <p>{{ phase.description }}</p>
+                    <p>Duration: {{ phase.duration }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="highlight-box">
+        <h2>Next Steps</h2>
+        <p>{{ next_steps }}</p>
+    </div>
+
+    <div class="footer">
+        <p>Prepared by Kuberanix</p>
+        <p>Contact: krishna@kuberanix.agency</p>
+    </div>
+</body>
+</html> 

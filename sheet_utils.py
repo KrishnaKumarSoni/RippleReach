@@ -1,0 +1,22 @@
+from enum import Enum
+
+class SheetColumns(Enum):
+    NAME = 'name'
+    EMAIL = 'email'
+    COMPANY_NAME = 'company_name'
+    COMPANY_DOMAIN = 'company_domain'
+    COMPANY_SIZE = 'company_size'
+    ROLE = 'role'
+    HEADLINE = 'headline'
+    COMPANY_BACKGROUND = 'Company Background'
+    COLD_EMAIL_SUBJECT = 'Cold Email Subject'
+    EMAIL_CONTENT = 'Email Content'
+    EMAIL_STATUS = 'Email Status'
+    LAST_SENDER = 'Last Sender'
+    LAST_MESSAGE = 'Last Message'
+    RESPONSE = 'Response'
+    RESPONSE_SUBJECT = 'Response Subject'
+    FOLLOW_UP_NEEDED = 'Follow-Up Needed'
+    CONVERSATION_HISTORY = 'Conversation History'
+    SENDER_EMAIL = 'Sender Email'
+    PROPOSAL = 'Proposal' 
