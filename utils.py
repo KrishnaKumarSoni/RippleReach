@@ -10,65 +10,27 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from jinja2 import Environment, FileSystemLoader
 jinja_env = Environment(loader=FileSystemLoader('templates'))
+import json  # Add this with other imports
 
 def format_html_email(email_content: str, agency_info: Dict) -> str:
+    """Format email content into HTML template"""
     try:
-        template = jinja_env.get_template('email_template.html')
-        
-        # Extract sender info
-        sender_info = agency_info.get('sender', {})
-        
-        # Format portfolio items HTML
-        portfolio_html = format_portfolio_html(agency_info.get('portfolio_items', []))
-        
-        # Format paragraphs properly
+        # Split content into paragraphs and clean up
         paragraphs = [p.strip() for p in email_content.split('\n') if p.strip()]
-        formatted_content = []
         
-        for p in paragraphs:
-            # Handle lists
-            if p.startswith(('- ', '* ', '• ')):
-                items = [item.strip('- *• ') for item in p.split('\n')]
-                formatted_items = []
-                for item in items:
-                    # Convert markdown bold to HTML bold
-                    item = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', item)
-                    formatted_items.append(f'<li>{item}</li>')
-                formatted_content.append(f"<ul>{''.join(formatted_items)}</ul>")
-            # Handle regular paragraphs
-            else:
-                # Convert markdown bold to HTML bold
-                p = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', p)
-                formatted_content.append(f"<p>{p}</p>")
-        
-        clean_content = '\n'.join(formatted_content)
-        
-        # Replace markdown-style links with HTML links
-        clean_content = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', clean_content)
-        
-        # Replace any remaining URLs with clickable links
-        clean_content = re.sub(
-            r'(https?://[^\s<>"]+|www\.[^\s<>"]+)', 
-            r'<a href="\1">\1</a>', 
-            clean_content
+        template = jinja_env.get_template('email_template.html')
+        return template.render(
+            paragraphs=paragraphs,
+            portfolio=agency_info.get('portfolio', {"has_portfolio": False, "assets": []}),
+            calendar_link=agency_info.get('calendar_link', '#'),
+            agency_website=agency_info.get('website', '#'),
+            sender_name=agency_info.get('sender', {}).get('name', ''),
+            sender_position=agency_info.get('sender', {}).get('position', ''),
+            agency_name=agency_info.get('name', ''),
+            sender_meta=agency_info.get('sender', {}).get('meta', '')
         )
-        
-        # Prepare template variables
-        template_vars = {
-            'email_content': clean_content,
-            'portfolio_items': portfolio_html,
-            'sender_name': sender_info.get('name', ''),
-            'sender_position': sender_info.get('position', ''),
-            'sender_meta': sender_info.get('meta', ''),  # Add this line
-            'agency_name': agency_info.get('name', ''),
-            'agency_website': agency_info.get('website', ''),
-            'calendar_link': agency_info.get('calendar_link', '')
-        }
-        
-        return template.render(**template_vars)
-        
     except Exception as e:
-        logging.error(f"Error formatting HTML email: {str(e)}")
+        logging.error(f"Error formatting HTML email: {e}")
         raise
 
 def format_portfolio_html(portfolio_items: List[Dict]) -> str:

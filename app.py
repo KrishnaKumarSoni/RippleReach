@@ -137,33 +137,19 @@ def process_new_lead(lead: Dict[str, Any], agency_info: Dict, index: int) -> Dic
             company_description = f"A technology company specializing in {lead.get(SheetColumns.HEADLINE.value, 'digital solutions')}"
 
         # Generate email content first
-        email_content = generate_cold_email_content(lead, agency_info, company_description)
+        email_content, portfolio_data = generate_cold_email_content(lead, agency_info, company_description)
         if not email_content:
             raise Exception("Failed to generate email content")
         
         # Generate subject line separately
-        subject = generate_subject_line(lead, agency_info)
+        subject = generate_subject_line(lead, agency_info, email_content)
         if not subject:
             raise Exception("Failed to generate subject line")
 
-        # Get portfolio items based on lead context
-        portfolio = PortfolioAssets()
-        relevant_assets = portfolio.get_relevant_assets(lead[SheetColumns.COMPANY_DOMAIN.value])
-        
-        # Format portfolio items for agency info
-        portfolio_items = [
-            {
-                'title': asset['name'],
-                'description': f"Relevant {asset['project']} showcase",
-                'link': asset['url']
-            }
-            for asset in relevant_assets.get('case_studies', [])[:2]
-        ]
-        
         # Add portfolio to agency info
         complete_agency_info = {
             **agency_info,
-            'portfolio_items': portfolio_items
+            'portfolio': portfolio_data  # This will be used in email template
         }
 
         # Validate final content
@@ -203,25 +189,7 @@ def process_new_lead(lead: Dict[str, Any], agency_info: Dict, index: int) -> Dic
         raise
 
 def process_client_reply(lead: Dict[str, Any], index: int, agency_info: Dict[str, Any]) -> Dict[str, Any]:
-    # Get portfolio items based on lead context
-    portfolio = PortfolioAssets()
-    relevant_assets = portfolio.get_relevant_assets(lead[SheetColumns.COMPANY_DOMAIN.value])
-
-    # Format portfolio items for agency info
-    portfolio_items = [
-        {
-            'title': asset['name'],
-            'description': f"Relevant {asset['project']} showcase",
-            'link': asset['url']
-        }
-        for asset in relevant_assets.get('case_studies', [])[:2]
-    ]
-
-    # Add portfolio to agency info
-    complete_agency_info = {
-        **agency_info,
-        'portfolio_items': portfolio_items
-    }
+    
     """Handle generating and sending response to client reply"""
     try:
         logging.info(f"Processing client reply for row {index}")
@@ -232,7 +200,7 @@ def process_client_reply(lead: Dict[str, Any], index: int, agency_info: Dict[str
         subject = f"Re: {original_subject}" if not original_subject.lower().startswith('re:') else original_subject
         
         # Generate response
-        response_email = determine_and_generate_response(
+        response_email, portfolio_data = determine_and_generate_response(
             {
                 **lead,
                 'name': lead.get(SheetColumns.NAME.value, '').split()[0]
@@ -240,6 +208,11 @@ def process_client_reply(lead: Dict[str, Any], index: int, agency_info: Dict[str
             previous_conversation, 
             agency_info
         )
+        # Add portfolio to agency info for template
+        complete_agency_info = {
+            **agency_info,
+            'portfolio': portfolio_data
+        }
         
         # Check if proposal is needed
         if "proposal" in lead.get(SheetColumns.LAST_MESSAGE.value, "").lower():
@@ -289,7 +262,7 @@ def process_client_reply(lead: Dict[str, Any], index: int, agency_info: Dict[str
             )
         })
 
-        return {"status": "success", "type": "response"}
+        return {"status": "run_success", "type": "response"}
     except Exception as e:
         logging.error(f"Error in process_client_reply: {str(e)}")
         raise
@@ -322,23 +295,23 @@ def monitor_emails_endpoint():
             "error": str(e)
         }), 500
 
-def generate_subject_line(lead: Dict[str, Any], agency_info: Dict) -> str:
+def generate_subject_line(lead: Dict[str, Any], agency_info: Dict, email_body) -> str:
     prompt = f"""
     Generate a compelling email subject line for this context:
     
     Company: {lead.get(SheetColumns.COMPANY_NAME.value)}
     Their Focus: {lead.get(SheetColumns.HEADLINE.value)}
     Our Company: {agency_info['name']}
+    Email Body: {email_body}
     
     Requirements:
-    - Specific to their AI SaaS business
     - Mention value proposition
     - Keep under 60 characters
     - No generic templates
     """
     
     response = openai.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7
     )

@@ -9,6 +9,7 @@ from http.client import RemoteDisconnected  # Add this
 import time  # Add this
 import json  # For better logging
 import openai  # Add this
+import re
 
 # Remove duplicate logging config
 logging.basicConfig(level=logging.INFO)
@@ -293,16 +294,32 @@ def get_agency_info() -> Dict:
         4. Structure services clearly
         5. Create comprehensive sender meta description
         6. Return valid JSON only
+         IMPORTANT: Return ONLY the JSON object, no other text.
+
         """
 
         response = openai.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o",  # Fixed typo in model name from gpt-4o to gpt-4
             messages=[{"role": "user", "content": processing_prompt}],
             temperature=0.3
         )
 
+        # Get the response content and clean it
+        response_content = response.choices[0].message.content.strip()
+        
         try:
-            agency_info = json.loads(response.choices[0].message.content)
+            # Log the raw response for debugging
+            logging.info(f"Raw OpenAI response: {response_content}")
+            # Strip quotes if response is wrapped in them
+            # Clean response content to extract just the JSON
+            response_content = re.sub(r'^[^{]*({.*})[^}]*$', r'\1', response_content)
+            # Remove any escaped quotes around the JSON
+            response_content = re.sub(r'^"({.*})"$', r'\1', response_content)
+            # Remove any remaining non-JSON text
+            response_content = re.sub(r'^[^{]*({[\s\S]*})[^}]*$', r'\1', response_content)
+            # Log the processed response content
+            logging.info(f"Processed response content: {response_content}")
+            agency_info = json.loads(response_content)
             logging.info("Successfully processed agency information")
             return agency_info
             
