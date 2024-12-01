@@ -211,44 +211,85 @@ def get_lead_data(start_row: int, end_row: int = 0) -> List[Dict[str, Any]]:
         logging.error(f"Error fetching lead data: {str(e)}")
         raise
 
-def get_agency_worksheet_data() -> Dict[str, str]:
-    """
-    Pulls data from 'Agency Info' worksheet, using first column as keys and second as values.
-    Returns a dictionary of agency information.
-    """
+def get_agency_worksheet():
+    """Returns the agency info worksheet"""
     try:
-        # Get the Agency Info worksheet
-        scopes = [
-        'https://spreadsheets.google.com/feeds',
-        'https://www.googleapis.com/auth/spreadsheets',
-        'https://www.googleapis.com/auth/drive'
-        ]
+        return connect_to_sheet().worksheet("Agency Info")
+    except Exception as e:
+        logging.error(f"Error accessing agency worksheet: {str(e)}")
+        return None
+
+def get_agency_worksheet_data() -> Dict:
+    """Fetches and structures all agency data from the worksheet"""
+    try:
+        worksheet = get_agency_worksheet()
+        if not worksheet:
+            raise ValueError("Could not access agency worksheet")
+            
+        # Get all values from the worksheet
+        all_rows = worksheet.get_all_values()
         
-        creds = ServiceAccountCredentials.from_json_keyfile_name(
-            'service_account.json', 
-            scopes
-        )
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(Config.SPREADSHEET_ID)
-        worksheet = sheet.worksheet('Agency Info')
+        # Initialize data structures
+        agency_data = {
+            'services': [],
+            'company_structure': [],
+            'portfolio_projects': [],
+            'single_values': {}
+        }
         
-        # Get all values from first two columns
-        data = worksheet.get_all_values()
+        # Process each row
+        for row in all_rows:
+            if len(row) < 2:  # Skip empty rows
+                continue
+                
+            category, description = row[0].strip(), row[1].strip()
+            
+            # Skip empty entries
+            if not category or not description:
+                continue
+                
+            # Group data by category
+            if category == 'Services':
+                agency_data['services'].append(description)
+            elif category == 'Company Structure':
+                agency_data['company_structure'].append(description)
+            elif category == 'Portfolio Projects':
+                # Parse portfolio project entries
+                if ' - ' in description:
+                    name, details = description.split(' - ', 1)
+                    agency_data['portfolio_projects'].append({
+                        'name': name.strip(),
+                        'details': details.strip()
+                    })
+            else:
+                # Store other single values
+                agency_data['single_values'][category] = description
         
-        # Convert to dictionary, skipping empty rows and header
-        agency_info = {}
-        for row in data:
-            if len(row) >= 2 and row[0].strip() and row[1].strip():  # Ensure both key and value exist
-                key = row[0].strip()
-                value = row[1].strip()
-                agency_info[key] = value
+        # Format the final structure
+        formatted_data = {
+            'name': agency_data['single_values'].get('Agency Name', ''),
+            'description': agency_data['single_values'].get('Agency Info', ''),
+            'website': agency_data['single_values'].get('Agency Website', ''),
+            'calendar_link': agency_data['single_values'].get('Calendar Link', ''),
+            'services': agency_data['services'],
+            'company_structure': agency_data['company_structure'],
+            'portfolio_projects': agency_data['portfolio_projects'],
+            'sender': {
+                'name': agency_data['single_values'].get('Sender Name', ''),
+                'position': agency_data['single_values'].get('Sender Position', ''),
+                'meta': agency_data['single_values'].get('Sender Meta Data', ''),
+                'email': f"krishna@kuberanix.agency"  # Hardcoded as per sheet
+            },
+            'labs': agency_data['company_structure'],
+            'pricing_info': agency_data['single_values'].get('Pricing', '')
+        }
         
-        logging.info(f"Successfully retrieved {len(agency_info)} agency info fields")
-        return agency_info
+        logging.info(f"Raw agency data dump: {json.dumps(formatted_data, indent=2)}")
+        return formatted_data
         
     except Exception as e:
-        logging.error(f"Error retrieving agency worksheet data: {str(e)}")
-        return {}
+        logging.error(f"Error fetching agency worksheet data: {str(e)}")
+        raise
 
 def get_agency_info() -> Dict:
     """Returns agency information using OpenAI to process and structure the data"""
@@ -326,7 +367,6 @@ def get_agency_info() -> Dict:
         except json.JSONDecodeError:
             logging.error("Failed to parse OpenAI response")
             raise
-            
     except Exception as e:
         logging.error(f"Error in get_agency_info: {str(e)}")
         # Return fallback values

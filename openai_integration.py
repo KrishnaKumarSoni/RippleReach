@@ -59,22 +59,28 @@ def generate_cold_email_content(lead: Dict, agency_info: Dict, company_descripti
             SheetColumns.NAME.value,
             SheetColumns.ROLE.value,
             SheetColumns.COMPANY_NAME.value
+
         ]
         
         for field in required_lead_fields:
-            if not lead.get(field):
+            field_value = None
+            for key, value in lead.items():
+                if key.lower().replace('_', ' ') == field.lower().replace('_', ' '):
+                    field_value = value
+                    break
+            if not field_value:
                 raise ValueError(f"Missing required lead field: {field}")
         
         # Log input data with safe gets
         lead_info = {
-            'name': lead.get(SheetColumns.NAME.value, ''),
-            'role': lead.get(SheetColumns.ROLE.value, ''),
-            'company': lead.get(SheetColumns.COMPANY_NAME.value, ''),
-            'headline': lead.get(SheetColumns.HEADLINE.value, ''),
-            'domain': lead.get(SheetColumns.COMPANY_DOMAIN.value, '')
+            'name': lead.get('Name', ''),
+            'role': lead.get('Role', ''),
+            'company': lead.get('Company Name', ''),
+            'headline': lead.get('Headline', ''),
+            'domain': lead.get('Company Domain', '')
         }
         
-        recipient_name = lead.get(SheetColumns.NAME.value, '').split()[0] if lead.get(SheetColumns.NAME.value) else ''
+        recipient_name = lead.get('Name', '').split()[0] if lead.get('Name') else ''
         
         
         # Initialize portfolio
@@ -124,12 +130,22 @@ def generate_cold_email_content(lead: Dict, agency_info: Dict, company_descripti
             messages=[{"role": "user", "content": analysis_prompt}],
             temperature=0.7
         )
+
+        logging.info(f"Raw analysis response: {analysis_response}")
+
         try:
             analysis = json.loads(analysis_response)
-            logging.info(f"Lead analysis completed: {json.dumps(analysis, indent=2)}")
+            logging.info(f"Parsed analysis: {json.dumps(analysis, indent=2)}")
+            
+            # Validate analysis structure
+            required_keys = ["formula", "pain_points", "relevant_service", "include_portfolio", "portfolio_item", "cta"]
+            missing_keys = [key for key in required_keys if key not in analysis]
+            if missing_keys:
+                raise ValueError(f"Analysis missing required keys: {missing_keys}")
+                
         except json.JSONDecodeError:
             logging.error(f"Failed to parse analysis JSON: {analysis_response}")
-            raise ValueError("Analysis generation failed")
+            raise ValueError("Analysis generation failed - invalid JSON")
         
         
         if not assets:
@@ -147,19 +163,20 @@ def generate_cold_email_content(lead: Dict, agency_info: Dict, company_descripti
             else:
                 logging.warning(f"Recommended portfolio item not found: {analysis['portfolio_item']}")
 
-        # Step 2: Email Generation using GPT-4
+        # Step 2: Email Generation using gpt-4o
         email_prompt = f"""
         Write a personalized cold email using this analysis:
         {json.dumps(analysis, indent=2)}
 
         RECIPIENT:
-        Name: {recipient_name}
+        Name: {lead_info['name']}
         Role: {lead_info['role']}
         Company: {lead_info['company']}
-        {f'PORTFOLIO TO INCLUDE:\n{portfolio_content}' if portfolio_content else ''}
+        Headline: {lead_info['headline']}
+        {f'PORTFOLIO TO INCLUDE:{chr(10)}{portfolio_content}' if portfolio_content else ''}
 
         FORMAT REQUIREMENTS:
-        - Start with "Hi {recipient_name},"
+        - Start with "Hi {lead_info['name']},"
         - Use single line breaks between paragraphs
         - Keep paragraphs short (2-3 sentences)
         - Based on the analysis, if required and only if required, use calendar link CTA: {agency_info.get('calendar_link')}
@@ -167,7 +184,7 @@ def generate_cold_email_content(lead: Dict, agency_info: Dict, company_descripti
         - No placeholders, No example sample companies like ABC XYZ etc. No subject lines, and No signatures
 
         Writing style: conversational, casual, engaging, simple to read, simple linear active voice sentences, informational and insightful.
-    
+
         Use the following formulas to write effective cold emails:
 
         1. AIDA: Start with an attention-grabbing subject line or opening sentence. Highlight the recipient's pain points to build interest. List the benefits and use social proof, scarcity, or exclusivity to create desire. End with a specific call to action.
@@ -186,10 +203,10 @@ def generate_cold_email_content(lead: Dict, agency_info: Dict, company_descripti
 
         8. RDM: Use facts (Fact-packed), be brief (Telegraphic), be specific (Specific), avoid too many adjectives (Few adjectives), and make them curious (Arouse curiosity).
 
-        These formulas will help you craft concise, casual, friendly engaging, and compelling cold emails.
-
         Write only the email body following the analyzed formula.
         """
+        logging.info(f"Email prompt: {email_prompt}")
+        print(f"Email prompt: {email_prompt}")
 
         email_content = make_openai_call(
             model="gpt-4o",
@@ -210,48 +227,66 @@ def generate_cold_email_content(lead: Dict, agency_info: Dict, company_descripti
 
 def generate_company_description(company_domain):
     try:
-        # Fetch the HTML content of the company's website
-        url = f"http://{company_domain}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise an error if the request was unsuccessful
-        
-        # Parse the HTML content with BeautifulSoup
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Extract main text content, focusing on paragraph and heading tags
-        text_content = ' '.join([p.get_text() for p in soup.find_all(['p', 'h1', 'h2', 'h3'])])
-        
-        # Limit the text to the first 1000 characters to focus on relevant content
-        text_content = text_content[:1000]
-        
-        if not text_content.strip():
-            logging.warning(f"No relevant text found on {company_domain}")
-            return "Company description unavailable."
-        
-        # Use OpenAI to summarize the scraped content
-        prompt = (
-            f"Here is some text extracted from the homepage of {company_domain}:\n\n"
-            f"{text_content}\n\n"
-            "Provide a brief and professional summary of what this company does."
-        )
+        # Try HTTPS first, then HTTP as fallback
+        for protocol in ['https://', 'http://']:
+            try:
+                url = f"{protocol}{company_domain}"
+                response = requests.get(url, 
+                    timeout=10,
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+                    allow_redirects=True
+                )
+                response.raise_for_status()
+                
+                # If we get here, the request succeeded
+                soup = BeautifulSoup(response.text, 'html.parser')
+                text_content = ' '.join([p.get_text() for p in soup.find_all(['p', 'h1', 'h2', 'h3'])])
+                text_content = text_content[:1000]
+                
+                if text_content.strip():
+                    prompt = f"""
+                    Based on this text from {company_domain}'s website:
+                    {text_content}
+                    
+                    Provide a brief, professional 2-3 sentence summary of what this company does.
+                    Focus on their core business and value proposition.
+                    """
+                    
+                    response = openai.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.7,
+                        max_tokens=150
+                    )
+                    return response.choices[0].message.content.strip()
+                    
+            except requests.RequestException:
+                continue  # Try next protocol if this one failed
+                
+        # If both protocols failed, fall back to AI generation
+        prompt = f"""
+        Based on the company domain name '{company_domain}', generate a brief, professional description 
+        of what this company likely does. Focus on:
+        1. Industry/sector
+        2. Likely products/services
+        3. Target market
+        Keep it factual and avoid speculation. If uncertain, keep it general but professional.
+        Maximum 2-3 sentences.
+        """
         
         response = openai.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=150,
-            temperature=0.5
+            temperature=0.7,
+            max_tokens=150
         )
         
-        company_description = response.choices[0].message.content.strip()
-        logging.info(f"Generated company description for {company_domain}")
-        return company_description
-
-    except requests.RequestException as e:
-        logging.error(f"Error fetching website content for {company_domain}: {e}")
-        return "Company description unavailable."
+        return response.choices[0].message.content.strip()
+        
     except Exception as e:
         logging.error(f"Error generating summary for {company_domain}: {e}")
         return "Company description unavailable."
+
 def determine_and_generate_response(lead_info, previous_conversation, agency_info):
     """Generate a response using two-step process with careful context analysis"""
     logging.info("Starting enhanced response generation process...")
@@ -641,16 +676,16 @@ def analyze_conversation(conversation_history: str) -> Dict[str, Any]:
         Take a deep breath and think step by step.
         """
         
-        response = openai.chat.completions.create(
+        response = make_openai_call(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3
         )
         
-        return {"analysis": response.choices[0].message.content.strip()}
+        return {"analysis": response}
     except Exception as e:
         logging.error(f"Error analyzing conversation: {e}")
-        return {"analysis": "Analysis failed", "error": str(e)}
+        raise  # Propagate error instead of returning failure dict
 
 def generate_response_email(lead: Dict[str, Any], conversation_history: str, agency_info: Dict[str, Any]) -> Tuple[str, str]:
     try:
@@ -818,3 +853,4 @@ def validate_final_content(email_body: str, subject_line: str, lead: Dict, agenc
     except Exception as e:
         logging.error(f"Error in final content validation: {str(e)}")
         raise
+

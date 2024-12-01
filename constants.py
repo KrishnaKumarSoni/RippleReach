@@ -1,13 +1,13 @@
 from enum import Enum
 
 class SheetColumns(str, Enum):
-    NAME = "name"
-    EMAIL = "email"
-    COMPANY_NAME = "company_name"
-    COMPANY_DOMAIN = "company_domain"
-    COMPANY_SIZE = "company_size"
-    ROLE = "role"
-    HEADLINE = "headline"
+    NAME = "Name"
+    EMAIL = "Email"
+    COMPANY_NAME = "Company Name"
+    COMPANY_DOMAIN = "Company Domain"
+    COMPANY_SIZE = "Company Size"
+    ROLE = "Role"
+    HEADLINE = "Headline"
     COMPANY_BACKGROUND = "Company Background"
     COLD_EMAIL_SUBJECT = "Cold Email Subject"
     EMAIL_CONTENT = "Email Content"
@@ -38,6 +38,14 @@ class SheetColumns(str, Enum):
     def optional_columns(cls) -> list[str]:
         """List of columns that are optional"""
         return [col.value for col in cls if col.value not in cls.required_columns()]
+
+    @classmethod
+    def get_value(cls, field: str) -> str:
+        """Get enum value with case-insensitive matching"""
+        for member in cls:
+            if member.value.lower() == field.lower():
+                return member.value
+        return field
 
 class EmailStatus(str, Enum):
     NEW = "New"  # Initial state when lead is first added to the system
